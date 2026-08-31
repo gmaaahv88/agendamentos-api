@@ -1,4 +1,4 @@
-const { describe, it, expect, vi, beforeEach } = require('vitest');
+
 
 // --- O que é um teste "unitário"? ---
 // É um teste que verifica UMA função isolada, sem depender de banco de dados
@@ -11,22 +11,15 @@ const { describe, it, expect, vi, beforeEach } = require('vitest');
 // Como database.js e notificationQueue.js usam "module.exports = algumaCoisa"
 // (CommonJS puro, sem export default), o mock precisa devolver o objeto
 // diretamente — sem envolver em { default: ... }.
-vi.mock('../../src/config/database', () => ({
-  appointment: {
-    findFirst: vi.fn(),
-  },
-}));
 
-vi.mock('../../src/queues/notificationQueue', () => ({
-  add: vi.fn(),
-}));
 
 const prisma = require('../../src/config/database');
+ const notificationQueue = require('../../src/queues/notificationQueue');
 const { hasConflict } = require('../../src/modules/appointments/appointments.service');
 
 describe('appointments.service - hasConflict', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    prisma.appointment.findFirst = vi.fn(); notificationQueue.add = vi.fn();
   });
 
   it('retorna true quando o Prisma encontra um agendamento sobreposto', async () => {
