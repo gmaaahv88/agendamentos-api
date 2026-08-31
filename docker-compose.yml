@@ -1,0 +1,32 @@
+# Isso sobe Postgres (banco de dados) e Redis (usado pela fila BullMQ)
+# de forma isolada, sem você precisar instalar nada na sua máquina.
+#
+# Como usar: docker compose up -d
+# Como parar: docker compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agendamentos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agendamentos
+      POSTGRES_PASSWORD: agendamentos123
+      POSTGRES_DB: agendamentos_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: agendamentos-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

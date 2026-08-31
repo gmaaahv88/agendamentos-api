@@ -1,0 +1,56 @@
+// Este arquivo descreve as tabelas do banco em formato declarativo.
+// O Prisma lê isso e gera: (1) o client TypeScript/JS que usamos no código,
+// e (2) as migrations (histórico de mudanças no banco).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Papéis possíveis de um usuário. Usar um enum aqui evita erros de digitação
+// tipo "admim" vs "admin" que aconteceriam se fosse só uma string livre.
+enum Role {
+  ADMIN
+  CLIENT
+}
+
+enum AppointmentStatus {
+  PENDING     // acabou de ser criado
+  CONFIRMED   // notificação de confirmação já foi enviada
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CLIENT)
+  createdAt    DateTime @default(now())
+
+  // Um usuário pode ter vários agendamentos.
+  appointments Appointment[]
+
+  @@map("users")
+}
+
+model Appointment {
+  id        String            @id @default(uuid())
+  title     String
+  startsAt  DateTime
+  endsAt    DateTime
+  status    AppointmentStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Índice composto: acelera muito a query que checa conflito de horário
+  // (ver appointments.service.js), que filtra por userId + intervalo de datas.
+  @@index([userId, startsAt, endsAt])
+  @@map("appointments")
+}
