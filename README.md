@@ -1,5 +1,7 @@
 # API de Agendamentos
 
+ [![Repositório](https://img.shields.io/badge/GitHub-agendamentos--api-181717?logo=github)](https://github.com/gmaaahv88/agendamentos-api) [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs)](https://nodejs.org) [![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
+
 Backend em Node.js com autenticação JWT, prevenção de conflito de horário e
 processamento assíncrono de notificações via fila (BullMQ + Redis).
 
