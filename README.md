@@ -32,6 +32,46 @@ real — não um CRUD de exemplo.
 - **Camadas separadas (routes → controller → service)**: cada uma tem uma
   responsabilidade só. Isso facilita testar o `service` isoladamente (testes
   unitários) sem precisar simular uma requisição HTTP inteira.
+- **Prevenção de conflito de horário em duas camadas (aplicação + banco)**:
+  a checagem na aplicação (`hasConflict`) cobre o caso comum, mas sozinha
+  não impede duas requisições simultâneas de passarem pela checagem ao
+  mesmo tempo. Por isso o banco também garante a regra via uma
+  `EXCLUDE CONSTRAINT` — ver seção abaixo.
+
+## Prevenção de conflito de horário sob concorrência
+
+A regra "um usuário não pode ter dois agendamentos que se sobrepõem" é
+validada de duas formas:
+
+1. **Na aplicação** (`appointments.service.js`, função `hasConflict`): faz um
+   `SELECT` antes do `INSERT`, comparando os intervalos de tempo. Rápido e
+   cobre o caso comum de uso sequencial.
+2. **No banco** (migration `add_no_overlap_constraint`): uma
+   `EXCLUDE CONSTRAINT` usando GiST (`btree_gist` + `tstzrange`) garante a
+   mesma regra dentro do próprio Postgres.
+
+A segunda camada existe porque a primeira sozinha tem uma condição de
+corrida: se duas requisições chegarem quase ao mesmo tempo, as duas podem
+fazer o `SELECT` e ver o horário livre *antes* de qualquer uma ter
+terminado o `INSERT` — resultando em dois agendamentos conflitantes, mesmo
+com testes sequenciais passando. Como o `SELECT` + `INSERT` não roda dentro
+de uma transação com lock, é o banco quem garante a integridade final,
+rejeitando o segundo `INSERT` com o erro `23P01` (exclusion_violation), que
+o `service` traduz para uma resposta `409 Conflict` amigável.
+
+Esse ponto cego foi identificado em uma sugestão do Carlos Moraes nos
+comentários do post deste projeto no LinkedIn — crédito a ele pela
+observação.
+
+Há um teste dedicado a provar isso na prática, disparando duas criações de
+agendamento em paralelo (`Promise.all`, não sequencial) pro mesmo horário:
+
+```bash
+npx vitest run tests/integration/race-condition.test.js
+```
+
+O teste confirma que só uma das duas requisições é aceita (201) e a outra é
+rejeitada (409) — nunca as duas.
 
 ## Pré-requisitos
 

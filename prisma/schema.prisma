@@ -41,8 +41,8 @@ model User {
 model Appointment {
   id        String            @id @default(uuid())
   title     String
-  startsAt  DateTime
-  endsAt    DateTime
+  startsAt DateTime @db.Timestamptz(3) 
+  endsAt DateTime @db.Timestamptz(3) 
   status    AppointmentStatus @default(PENDING)
   createdAt DateTime          @default(now())
 

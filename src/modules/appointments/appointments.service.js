@@ -1,6 +1,16 @@
 const prisma = require('../../config/database');
 const notificationQueue = require('../../queues/notificationQueue');
 
+// O Prisma não tem um código próprio pra violação de EXCLUDE constraint
+// (diferente do P2002 pra UNIQUE), então checamos o código bruto do
+// Postgres (23P01 = exclusion_violation) dentro da mensagem do erro.
+function isExclusionViolation(err) {
+  return (
+    (err?.code === 'P2010' && err?.meta?.code === '23P01') ||
+    String(err?.message).includes('23P01')
+  );
+}
+
 // --- A regra de negócio mais importante do projeto: não deixar dois
 // agendamentos do mesmo usuário se sobreporem no tempo. ---
 //
@@ -31,9 +41,22 @@ async function create(userId, data) {
     throw error;
   }
 
-  const appointment = await prisma.appointment.create({
-    data: { title: data.title, startsAt, endsAt, userId },
-  });
+  let appointment;
+  try {
+    appointment = await prisma.appointment.create({
+      data: { title: data.title, startsAt, endsAt, userId },
+    });
+  } catch (err) {
+    // Segunda linha de defesa: se duas requisições passarem pelo hasConflict
+    // ao mesmo tempo (condição de corrida), é a constraint no banco
+    // (no_overlapping_appointments) que barra o INSERT duplicado.
+    if (isExclusionViolation(err)) {
+      const error = new Error('Já existe um agendamento seu nesse horário.');
+      error.statusCode = 409;
+      throw error;
+    }
+    throw err;
+  }
 
   // Aqui é o pulo do gato do projeto: em vez de enviar a notificação agora
   // (o que deixaria a resposta lenta), só adicionamos um "job" na fila.
@@ -90,7 +113,6 @@ async function getById(userId, id) {
 
 async function update(userId, id, data) {
   const existing = await getById(userId, id); // já lança 404 se não existir
-
   const startsAt = data.startsAt ? new Date(data.startsAt) : existing.startsAt;
   const endsAt = data.endsAt ? new Date(data.endsAt) : existing.endsAt;
 
@@ -102,10 +124,19 @@ async function update(userId, id, data) {
     }
   }
 
-  return prisma.appointment.update({
-    where: { id },
-    data: { ...data, startsAt, endsAt },
-  });
+  try {
+    return await prisma.appointment.update({
+      where: { id },
+      data: { ...data, startsAt, endsAt },
+    });
+  } catch (err) {
+    if (isExclusionViolation(err)) {
+      const error = new Error('Esse novo horário conflita com outro agendamento seu.');
+      error.statusCode = 409;
+      throw error;
+    }
+    throw err;
+  }
 }
 
 async function remove(userId, id) {
